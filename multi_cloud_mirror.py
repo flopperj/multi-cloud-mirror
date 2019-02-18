@@ -65,7 +65,7 @@ def connectToClouds():
 #######################################################################
 def copyToS3(srcBucketName, myKeyName, destBucketName,tmpDir):
    """
-   Copy files to S3 from CF, given a source container and key, 
+   Copy files to S3 from CF, given a source container and key,
    and a destination bucket and temporary file for local storage
    """
    # because of the way S3 and boto work, we have to save to a local file first, then upload to Cloud Files
@@ -206,9 +206,13 @@ class MultiCloudMirror:
       cfList = []
       cfList.extend(self.cfConn.get_container(cfBucketName).get_objects())
       lastLen = len(cfList)
+
+      # Always compare against size of new list of objects to make sure we can get to next page
       while lastLen == self.CF_MAX_OBJECTS_IN_LIST:
-         cfList.extend(self.cfConn.get_container(cfBucketName).get_objects(marker=cfList[-1].name))
-         lastLen = len(cfList) - lastLen
+         new_objects = self.cfConn.get_container(cfBucketName).get_objects(marker=cfList[-1].name)
+         cfList.extend(new_objects)
+         lastLen = len(new_objects)
+
       # Now assign bucket/container lists to class lists
       if srcService == 's3':
          self.srcList        = self.s3Conn.get_bucket(srcBucketName).list()
@@ -243,7 +247,7 @@ class MultiCloudMirror:
       if (dKey.size > self.maxFileSize):
          self.logItem("Skipping %s because it is too large (%d bytes)" % (myKeyName, dKey.size), self.LOG_WARN)
          return
-               
+
       # Delete if file does not exist at source
       doDelete = False
       if myKeyName not in self.filesAtSource:
@@ -266,7 +270,7 @@ class MultiCloudMirror:
             self.maxFileDeletion = self.maxFileDeletion - 1
             if (self.maxFileDeletion == 0):
                self.logItem("...Reached max file deletion limit - any further files will be ignored", self.LOG_INFO)
-               
+
       else:
          # if we did not need to copy the file, log it:
          self.logItem("...Found at source, so it will not be deleted", self.LOG_DEBUG)
@@ -402,16 +406,16 @@ class MultiCloudMirror:
          # Iterate through files at the source to see which ones to copy, and put them on the multiprocessing queue:
          for sKey in self.srcList:
             self.checkAndCopy(sKey, srcService, srcBucketName, destService, destBucketName)
- 
-         runDelete = True           
+
+         runDelete = True
          if (self.syncCount < self.minFileSync):
             runDelete = False
             self.logItem("Skipping file deletion as min number of files for sync was not reached", self.LOG_INFO)
-      
+
          if runDelete:
             for dKey in self.destList:
                self.checkAndDelete(dKey, destService, destBucketName)
-            
+
       self.waitForJobstoFinish()
       self.logItem("\n\n%s Files were previously mirrored %s Files Copied %s Files Deleted" % (self.syncCount, self.copyCount, self.deleteCount), self.LOG_INFO)
       self.logItem("\n\nMulti-Cloud Mirror Script ended at %s" % (str(datetime.datetime.now())), self.LOG_INFO)
